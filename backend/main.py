@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 
 load_dotenv()   # 추가
-app = FastAPI()
+app = FastAPI(title = "검색 보조 서비스")
 BRAVE_API_KEY = os.getenv("BRAVE_API_KEY")
 BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 
