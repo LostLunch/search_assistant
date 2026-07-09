@@ -17,6 +17,7 @@ BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 origins = [
     "http://localhost:3000",
     "http://localhost:5173",  # Vite를 쓰신다면 5173
+    "https://search-assistant-pi.vercel.app/"
 ]
 
 app.add_middleware(
