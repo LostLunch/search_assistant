@@ -1,154 +1,212 @@
 import React, { useState } from 'react';
 
-export default function SearchAssistant() {
-  // 상태 관리 (필요에 따라 확장하세요)
-  const [activePanels, setActivePanels] = useState({
-    blog: true,
-    cafe: false,
-    news: false,
-  });
-  const [searchQuery, setSearchQuery] = useState('');
-  const [domainRestrict, setDomainRestrict] = useState('');
+// UI 아이콘 컴포넌트들
+const SearchIcon = () => <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
+const PlaneIcon = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>;
 
-  // 패널 토글 함수
-  const togglePanel = (panel) => {
-    setActivePanels((prev) => ({ ...prev, [panel]: !prev[panel] }));
+function App() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // 💡 상태 추가: 현재 화면 상단에 박아줄 '검색이 완료된 키워드'
+  const [currentSearchTerm, setCurrentSearchTerm] = useState('');
+  // 💡 상태 추가: AI가 개선한 쿼리 결과를 저장할 상태
+  const [aiImprovedTerm, setAiImprovedTerm] = useState(''); 
+
+  // 정적 UI 구성을 위한 고정된 카테고리 리스트
+  const staticCategories = [
+    { id: 'news', label: '뉴스 언론사' },
+    { id: 'paper', label: '학술 논문' },
+    { id: 'official', label: '공공사이트' }
+  ];
+
+  // 사용자가 체크박스로 선택한 카테고리 ID 배열
+  const [selectedCategories, setSelectedCategories] = useState([]);
+
+  // 카테고리 체크박스 선택/해제 핸들러
+  const handleCategoryToggle = (catId) => {
+    setSelectedCategories(prev => 
+      prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]
+    );
   };
 
-  // 검색 제출 핸들러
-  const handleSearch = (e) => {
+  // 검색 실행
+  const handleSearch = async (e) => {
     e.preventDefault();
-    console.log({
-      activePanels,
-      searchQuery,
-      domainRestrict,
+    if (!query.trim()) return;
+    setIsLoading(true);
+
+    // 💡 검색을 시작하자마자 입력했던 글자를 상단 키워드로 박제하고, 입력창은 비웁니다.
+    const termToSearch = query;
+    setCurrentSearchTerm(termToSearch);
+    setQuery('');
+    setAiImprovedTerm(''); // AI 개선 쿼리 초기화
+
+    // 선택된 카테고리들에 속한 모든 도메인들을 하나의 배열로 평탄화
+    const domainsToSend = [];
+    staticCategories.forEach(category => {
+      if (selectedCategories.includes(category.id)) {
+        // 실제 운영 시 도메인 하드코딩 매핑이 필요하다면 여기에 push, 
+        // 키값 그대로 보낸다면 기존 설정을 따릅니다.
+        domainsToSend.push(category.id); 
+      }
     });
-    alert(`검색 실행!\n검색어: ${searchQuery}\n제한 도메인: ${domainRestrict}`);
+
+    try {
+      const response = await fetch('http://localhost:8000/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: termToSearch, // 💡 비워지기 전의 기존 검색어로 요청 전송
+          filter: selectedCategories
+        }),
+      });
+
+      if (!response.ok) throw new Error('API 응답 실패');
+      
+      const data = await response.json();
+      setResults(data.results || []);
+      setAiImprovedTerm(data.improved_query || ''); // 💡 AI 개선 쿼리 상태 업데이트
+    } catch (error) {
+      console.error('검색 중 오류 발생:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 text-gray-800 font-sans">
+    <div className="flex h-screen bg-gray-50 text-gray-900 overflow-hidden relative font-sans">
       
-      {/* 1. 왼쪽 사이드바 (사이트 종류 활성화 패널) */}
-      <aside className="w-64 bg-white border-r border-gray-200 p-6 flex flex-col justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-indigo-600 mb-6 flex items-center gap-2">
-            🔍 검색 보조기
-          </h2>
-          
-          <div className="space-y-4">
-            <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-              대상 사이트 필터
-            </p>
-            
-            {/* 패널 1: 블로그 */}
-            <button
-              onClick={() => togglePanel('blog')}
-              className={`w-full p-4 rounded-xl border text-left transition-all duration-200 flex justify-between items-center ${
-                activePanels.blog
-                  ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-medium shadow-sm'
-                  : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
-              }`}
-            >
-              <span>📝 블로그 검색</span>
-              <span className={`w-2.5 h-2.5 rounded-full ${activePanels.blog ? 'bg-indigo-600' : 'bg-gray-300'}`} />
-            </button>
-
-            {/* 패널 2: 카페 */}
-            <button
-              onClick={() => togglePanel('cafe')}
-              className={`w-full p-4 rounded-xl border text-left transition-all duration-200 flex justify-between items-center ${
-                activePanels.cafe
-                  ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-medium shadow-sm'
-                  : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
-              }`}
-            >
-              <span>☕ 카페 커뮤니티</span>
-              <span className={`w-2.5 h-2.5 rounded-full ${activePanels.cafe ? 'bg-indigo-600' : 'bg-gray-300'}`} />
-            </button>
-
-            {/* 패널 3: 뉴스 */}
-            <button
-              onClick={() => togglePanel('news')}
-              className={`w-full p-4 rounded-xl border text-left transition-all duration-200 flex justify-between items-center ${
-                activePanels.news
-                  ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-medium shadow-sm'
-                  : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
-              }`}
-            >
-              <span>📰 뉴스 기사</span>
-              <span className={`w-2.5 h-2.5 rounded-full ${activePanels.news ? 'bg-indigo-600' : 'bg-gray-300'}`} />
-            </button>
-          </div>
+      {/* 1. 사이드바 */}
+      <aside className="w-72 bg-white border-r border-gray-200 flex flex-col h-full z-10 select-none">
+        <div className="p-6 border-b border-gray-100">
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">검색 보조 프로그램</h1>
         </div>
 
-        <div className="text-xs text-gray-400 text-center">
-          © 2026 Search Assistant
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <p className="text-xs font-bold text-gray-400 tracking-wider uppercase px-2 mb-2">출처 필터링</p>
+          
+          <div className="space-y-2">
+            {staticCategories.map((category) => {
+              const isChecked = selectedCategories.includes(category.id);
+              
+              return (
+                <label 
+                  key={category.id} 
+                  className="flex items-center p-3.5 bg-white border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => handleCategoryToggle(category.id)}
+                      className="w-5 h-5 rounded border-gray-300 border-2 appearance-none cursor-pointer transition-all relative after:content-[''] after:absolute after:hidden after:top-[2px] after:left-[6px] after:w-[5px] after:h-[10px] after:border-white after:border-r-2 after:border-b-2 after:rotate-45 checked:after:block checked:bg-blue-600 checked:border-blue-600"
+                    />
+                    <span className={`text-sm font-medium transition-colors ${isChecked ? 'text-gray-900 font-semibold' : 'text-gray-700'}`}>
+                      {category.label}
+                    </span>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
         </div>
       </aside>
 
-      {/* 2. 메인 콘텐츠 영역 */}
-      <main className="flex-1 flex flex-col justify-center items-center p-8">
-        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
-          
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl font-extrabold text-gray-900 mb-2">어떤 정보를 찾으시나요?</h1>
-            <p className="text-sm text-gray-500">사이드바의 필터와 아래 세부 조건을 입력해 정확하게 검색해보세요.</p>
-          </div>
-
-          <form onSubmit={handleSearch} className="space-y-6">
+      {/* 2. 메인 결과 레이아웃 영역 */}
+      <main className="flex-1 flex flex-col p-8 overflow-y-auto pb-32 relative bg-slate-50/50">
+        
+        {/* 💡 최상단 검색어 표출 타이틀 영역 (검색된 단어가 있을 때만 표시) */}
+        {currentSearchTerm && (
+          <div className="max-w-4xl w-full mx-auto mb-6 pb-4 border-b border-gray-200/60">
+            {/* 1. 사용자가 입력한 원래 질문 (크고 명확하게) */}
+            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
+              <span className="text-blue-600">"{currentSearchTerm}"</span> 검색 결과
+            </h2>
             
-            {/* 메인 입력 칸 (검색어) */}
-            <div>
-              <label htmlFor="search" className="block text-sm font-semibold text-gray-700 mb-2">
-                검색어 입력
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  id="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="검색하고 싶은 키워드를 입력하세요..."
-                  className="w-full px-5 py-4 bg-gray-50 border border-gray-300 rounded-xl shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-lg transition-all"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* 아래 원하는 도메인 적는 곳 */}
-            <div>
-              <label htmlFor="domain" className="block text-sm font-semibold text-gray-700 mb-2">
-                특정 도메인 제한 (선택)
-              </label>
-              <div className="flex rounded-xl shadow-sm">
-                <span className="inline-flex items-center px-4 rounded-l-xl border border-r-0 border-gray-300 bg-gray-100 text-gray-500 text-sm">
-                  site:
+            {/* 2. AI가 다듬은 쿼리 (아래에 작고 스마트하게 서브 플로팅) */}
+            {results.length > 0 && (
+              <p className="text-sm text-gray-400 mt-2 flex items-center gap-1.5 bg-slate-100 w-fit px-2.5 py-1 rounded-md">
+                <span className="font-semibold text-emerald-600"> AI 쿼리 최적화:</span>
+                <span className="text-gray-300">|</span>
+                <span className="italic font-medium text-gray-700">
+                  {/* 백엔드 응답 데이터 구조에 맞게 매핑 (예: data.improved_query) */}
+                  {aiImprovedTerm || "필터링된 키워드로 검색되었습니다."}
                 </span>
-                <input
-                  type="text"
-                  id="domain"
-                  value={domainRestrict}
-                  onChange={(e) => setDomainRestrict(e.target.value)}
-                  placeholder="example.com (특정 사이트 내에서만 검색할 때)"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-r-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                />
-              </div>
-              <p className="mt-1.5 text-xs text-gray-400">구글의 `site:` 문법처럼 특정 도메인 결과만 필터링합니다.</p>
-            </div>
+              </p>
+            )}
+          </div>
+        )}
 
-            {/* 검색 버튼 */}
-            <button
-              type="submit"
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
-            >
-              스마트 검색 시작하기
-            </button>
+        {!isLoading && results.length > 0 && (
+          <div className="max-w-4xl w-full mx-auto space-y-4">
+            {results.map((item, index) => (
+              <article key={index} className="p-6 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                    {item.source || new URL(item.url).hostname}
+                  </span>
+                </div>
+                <h2 className="text-lg font-bold text-slate-900 hover:text-blue-600 transition mb-1">
+                  <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
+                </h2>
+                <p className="text-xs text-emerald-700 mb-2 truncate">{item.url}</p>
+                <p className="text-sm text-gray-600 leading-relaxed">{item.snippet}</p>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {/* 대기/빈 결과 상태 */}
+        {!isLoading && results.length === 0 && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center opacity-60">
+            <p className="text-gray-500 font-medium text-lg">결과가 여기에 표시됩니다.</p>
+            <p className="text-sm text-gray-400 mt-1">하단 검색 창에서 검색을 시작해 보세요.</p>
+          </div>
+        )}
+
+        {/* 로딩 바 */}
+        {isLoading && (
+          <div className="flex-1 flex flex-col justify-center items-center gap-4 animate-fade-in">
+            {/* 점선으로 빙글빙글 도는 원 */}
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-dashed"></div>
             
+            {/* 로딩 원 아래에 추가한 커스텀 문구 */}
+            <div className="text-center space-y-1">
+              <p className="text-base font-semibold text-slate-700">AI가 최적의 검색어를 조율하고 있습니다</p>
+              <p className="text-xs text-gray-400">잠시만 기다려 주세요...</p>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* 3. 하단 고정 검색바 */}
+      <footer className="absolute bottom-0 left-72 right-0 bg-gradient-to-t from-gray-50 via-gray-50/90 to-transparent p-6 z-20">
+        <div className="max-w-4xl mx-auto">
+          <form onSubmit={handleSearch} className="flex items-center bg-white border border-gray-200 rounded-2xl shadow-lg p-2 pl-4 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
+            <div className="p-1">
+              <SearchIcon />
+            </div>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="궁금한 내용을 탐구해 보세요..."
+              className="flex-1 px-3 py-2.5 bg-transparent text-sm focus:outline-none text-gray-800 placeholder-gray-400"
+            />
+            <button type="submit" disabled={isLoading} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold rounded-xl shadow transition">
+              <span>Search</span>
+              <PlaneIcon />
+            </button>
           </form>
         </div>
-      </main>
+      </footer>
 
     </div>
   );
 }
+
+export default App;
