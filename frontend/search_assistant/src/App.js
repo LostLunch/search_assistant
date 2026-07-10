@@ -3,65 +3,72 @@ import React, { useState } from 'react';
 // UI 아이콘 컴포넌트들
 const SearchIcon = () => <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
 const PlaneIcon = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>;
+const CloseIcon = () => <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>;
 
 function App() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  // 💡 상태 추가: 현재 화면 상단에 박아줄 '검색이 완료된 키워드'
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
-  // 💡 상태 추가: AI가 개선한 쿼리 결과를 저장할 상태
   const [aiImprovedTerm, setAiImprovedTerm] = useState(''); 
 
-  // 정적 UI 구성을 위한 고정된 카테고리 리스트
   const staticCategories = [
     { id: 'news', label: '뉴스 언론사' },
     { id: 'paper', label: '학술 논문' },
-    { id: 'official', label: '공공사이트' }
+    { id: 'stat_data', label: '통계 (수행평가)' },
+    { id: 'policy_report', label: '정책 보고서 (탐구)' },
+    { id: 'edu_institution', label: '교육 및 법령' },
   ];
 
-  // 사용자가 체크박스로 선택한 카테고리 ID 배열
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [customFilters, setCustomSites] = useState([]);
+  const [customInput, setCustomInput] = useState('');
 
-  // 카테고리 체크박스 선택/해제 핸들러
   const handleCategoryToggle = (catId) => {
     setSelectedCategories(prev => 
       prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]
     );
   };
 
-  // 검색 실행
+  const handleAddCustomSite = (e) => {
+    e.preventDefault();
+    const trimmed = customInput.trim().toLowerCase();
+    if (!trimmed) return;
+    
+    let domain = trimmed.replace(/^(https?:\/\/)?(www\.)?/, '');
+    domain = domain.split('/')[0];
+
+    if (domain && !customFilters.includes(domain)) {
+      setCustomSites(prev => [...prev, domain]);
+    }
+    setCustomInput('');
+  };
+
+  const handleRemoveCustomSite = (siteToRemove) => {
+    setCustomSites(prev => prev.filter(site => site !== siteToRemove));
+  };
+
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!query.trim()) return;
     setIsLoading(true);
 
-    // 💡 검색을 시작하자마자 입력했던 글자를 상단 키워드로 박제하고, 입력창은 비웁니다.
     const termToSearch = query;
     setCurrentSearchTerm(termToSearch);
     setQuery('');
-    setAiImprovedTerm(''); // AI 개선 쿼리 초기화
-
-    // 선택된 카테고리들에 속한 모든 도메인들을 하나의 배열로 평탄화
-    const domainsToSend = [];
-    staticCategories.forEach(category => {
-      if (selectedCategories.includes(category.id)) {
-        // 실제 운영 시 도메인 하드코딩 매핑이 필요하다면 여기에 push, 
-        // 키값 그대로 보낸다면 기존 설정을 따릅니다.
-        domainsToSend.push(category.id); 
-      }
-    });
+    setAiImprovedTerm(''); 
 
     try {
-      const response = await fetch('https://search-assistant-qi8d.onrender.com/search', {
+      const response = await fetch('http://localhost:8000/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: termToSearch, // 💡 비워지기 전의 기존 검색어로 요청 전송
-          filter: selectedCategories
+          query: termToSearch, 
+          filter: selectedCategories,
+          custom_filter: customFilters
         }),
       });
 
@@ -69,7 +76,7 @@ function App() {
       
       const data = await response.json();
       setResults(data.results || []);
-      setAiImprovedTerm(data.improved_query || ''); // 💡 AI 개선 쿼리 상태 업데이트
+      setAiImprovedTerm(data.improved_query || ''); 
     } catch (error) {
       console.error('검색 중 오류 발생:', error);
     } finally {
@@ -86,13 +93,12 @@ function App() {
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">검색 보조 프로그램</h1>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <p className="text-xs font-bold text-gray-400 tracking-wider uppercase px-2 mb-2">출처 필터링</p>
-          
+        {/* 상단 스크롤 영역: 기본 필터링 체크박스들 */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <p className="text-xs font-bold text-gray-400 tracking-wider uppercase px-2">출처 필터링</p>
           <div className="space-y-2">
             {staticCategories.map((category) => {
               const isChecked = selectedCategories.includes(category.id);
-              
               return (
                 <label 
                   key={category.id} 
@@ -114,26 +120,73 @@ function App() {
             })}
           </div>
         </div>
+
+        {/* 💡 변경된 하단 고정 영역: 입력창을 위로 올리고 리스트를 아래로 내림 */}
+        <div className="p-4 border-t border-gray-100 bg-slate-50/50 flex flex-col max-h-[45%]">
+          {/* [위] 커스텀 필터 입력창 */}
+          <div className="mb-4">
+            <p className="text-xs font-bold text-gray-400 tracking-wider uppercase px-2 mb-2">커스텀 필터 추가</p>
+            <p className="text-[10px] font-bold text-gray-400 tracking-wider uppercase px-2 mb-2">올바르지 않은 형식은 제외</p>
+            <form onSubmit={handleAddCustomSite} className="flex gap-2">
+              <input
+                type="text"
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                placeholder="예: github.com 또는 tistory"
+                className="flex-1 min-w-0 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-800"
+              />
+              <button 
+                type="submit"
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow transition shrink-0"
+              >
+                추가
+              </button>
+            </form>
+          </div>
+
+          {/* [아래] 내가 추가한 사이트 리스트 (개수가 많아지면 내부 스크롤 제공) */}
+          <div className="flex-1 overflow-y-auto min-h-[60px] max-h-[160px] border border-dashed border-gray-200 rounded-xl p-2.5 bg-white/50">
+            <p className="text-[10px] font-bold text-gray-400 tracking-wider uppercase mb-2 px-1">지정된 커스텀 필터 ({customFilters.length})</p>
+            
+            {customFilters.length === 0 ? (
+              <p className="text-xs text-gray-400 italic text-center py-4">추가된 사이트가 없습니다.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {customFilters.map((site) => (
+                  <span 
+                    key={site} 
+                    className="flex items-center gap-1 text-xs font-medium text-slate-700 bg-white pl-2.5 pr-1.5 py-1 rounded-full border border-slate-200 shadow-sm animate-fade-in"
+                  >
+                    {site}
+                    <button 
+                      onClick={() => handleRemoveCustomSite(site)}
+                      className="p-0.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                      title="필터 삭제"
+                    >
+                      <CloseIcon />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </aside>
 
       {/* 2. 메인 결과 레이아웃 영역 */}
       <main className="flex-1 flex flex-col p-8 overflow-y-auto pb-32 relative bg-slate-50/50">
         
-        {/* 💡 최상단 검색어 표출 타이틀 영역 (검색된 단어가 있을 때만 표시) */}
         {currentSearchTerm && (
           <div className="max-w-4xl w-full mx-auto mb-6 pb-4 border-b border-gray-200/60">
-            {/* 1. 사용자가 입력한 원래 질문 (크고 명확하게) */}
             <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
               <span className="text-blue-600">"{currentSearchTerm}"</span> 검색 결과
             </h2>
             
-            {/* 2. AI가 다듬은 쿼리 (아래에 작고 스마트하게 서브 플로팅) */}
             {results.length > 0 && (
               <p className="text-sm text-gray-400 mt-2 flex items-center gap-1.5 bg-slate-100 w-fit px-2.5 py-1 rounded-md">
                 <span className="font-semibold text-emerald-600"> AI 쿼리 최적화:</span>
                 <span className="text-gray-300">|</span>
                 <span className="italic font-medium text-gray-700">
-                  {/* 백엔드 응답 데이터 구조에 맞게 매핑 (예: data.improved_query) */}
                   {aiImprovedTerm || "필터링된 키워드로 검색되었습니다."}
                 </span>
               </p>
@@ -160,7 +213,6 @@ function App() {
           </div>
         )}
 
-        {/* 대기/빈 결과 상태 */}
         {!isLoading && results.length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center opacity-60">
             <p className="text-gray-500 font-medium text-lg">결과가 여기에 표시됩니다.</p>
@@ -168,13 +220,9 @@ function App() {
           </div>
         )}
 
-        {/* 로딩 바 */}
         {isLoading && (
           <div className="flex-1 flex flex-col justify-center items-center gap-4 animate-fade-in">
-            {/* 점선으로 빙글빙글 도는 원 */}
             <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-dashed"></div>
-            
-            {/* 로딩 원 아래에 추가한 커스텀 문구 */}
             <div className="text-center space-y-1">
               <p className="text-base font-semibold text-slate-700">AI가 최적의 검색어를 조율하고 있습니다</p>
               <p className="text-xs text-gray-400">잠시만 기다려 주세요...</p>

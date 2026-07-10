@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 import requests
 from urllib.parse import urlparse
 from pydantic import BaseModel
-from filter import apply_site_filters, SITE_FILTERS
 import re
 
 load_dotenv()   # 추가
@@ -52,6 +51,43 @@ prompt = """너는 Brave Search API에 전달할 최적의 한국어 쿼리를 �
 입력: 양자 컴퓨터
 출력: 양자 컴퓨터"""
 
+SITE_FILTERS = {
+    # 1. 신뢰도 높은 뉴스 언론사
+    "news": [
+        "news.naver.com", "yna.co.kr", "khan.co.kr", "hani.co.kr", 
+        "chosun.com", "donga.com", "joongang.co.kr"
+    ],
+    # 2. 학술 논문 및 연구 자료
+    "paper": [
+        "dbpia.co.kr", "riss.kr", "kiss.kstudy.com", "kci.go.kr", "scienceon.kisti.re.kr"
+    ],
+    # 3. [추천] 통계 및 원천 데이터 (수행평가 근거용)
+    "stat_data": [
+        "kosis.kr", "data.go.kr", "index.go.kr", "ecos.bok.or.kr"
+    ],
+    # 4. [추천] 국책 연구원 전문 보고서 (심화 탐구용)
+    "policy_report": [
+        "kdi.re.kr", "kipf.re.kr", "krei.re.kr", "kli.re.kr", "stepi.re.kr"
+    ],
+    # 5. [추천] 교육 및 법령 공공기관 (교차 검증용)
+    "edu_institution": [
+        "moe.go.kr", "kice.re.kr", "keris.or.kr", "law.go.kr"
+    ]
+}
+
+def set_goggle(filters: list[str],user_filters:list[str]=[]) -> str:
+    filters_list = []
+    for f in filters:
+        filters_list.extend(SITE_FILTERS.get(f, []))
+    if user_filters:
+        filters_list.extend(user_filters)
+    if not filters_list:
+        return ""
+    
+    filter_list = list(set(filters_list))  # 중복 제거
+    goggle_rules = ["$discard"] + [f"$site={site}" for site in filter_list]
+    return "\n".join(goggle_rules)
+
 def remove_html_tags(text: str) -> str:
     if not text:
         return ""
@@ -67,18 +103,24 @@ def imporve_query(input_text: str):
     )
     return response.output_text.strip()
 
-def brave_search(query: str, filter:list[str] = []):
+def brave_search(query: str, filter:list[str] = [],user_filters:list[str] = []) -> list[dict]:
     headers = {
         "Accept": "application/json",
         "X-Subscription-Token": BRAVE_API_KEY
     }
-    query = apply_site_filters(query, filter)
+
     parmas = {
         "q": query,
         "country": "kr",
-        "count": 10,
-        "safesearch": "strict"
+        "count": 20,
+        "safesearch": "strict",
     }
+    print(f"Filters: {filter}, User Filters: {user_filters}")
+    goggle = set_goggle(filter, user_filters)
+    if goggle:
+        parmas["goggles"] = goggle
+        print(parmas["goggles"])
+
     response = requests.get(BRAVE_ENDPOINT, headers=headers, params=parmas)
     if response.status_code != 200:
         print(f"Error: {response.status_code}, {response.text}")
@@ -101,16 +143,19 @@ def brave_search(query: str, filter:list[str] = []):
 class SearchRequest(BaseModel):
     query: str
     filter: list[str] = []
+    custom_filter: list[str] = []
+    
 
 @app.post("/search")
 async def search_endpoint(request: SearchRequest):
     orginal_query = request.query
     filters = request.filter
+    custom_filters = request.custom_filter
     improved_query = imporve_query(orginal_query)
     if not filters:
-        search_results = brave_search(improved_query)
+        search_results = brave_search(improved_query,user_filters=custom_filters)
     else:
-        search_results = brave_search(improved_query, filters)
+        search_results = brave_search(improved_query, filters, custom_filters)
     return {
         "original_query": orginal_query,
         "improved_query": improved_query,
@@ -125,22 +170,3 @@ def read_root():
 def search():
     return {"message": "CORS 해결 완료!"}
 
-@app.get("/filter-settings")
-async def get_filter_settings():
-    # 프론트엔드 UI 구성에 필요한 껍데기 정보를 입혀서 내려줍니다.
-    meta_info = {
-        "news": {"label": "뉴스 언론사", "color": "bg-blue-500 border-blue-500"},
-        "paper": {"label": "학술 논문", "color": "bg-emerald-500 border-emerald-500"},
-        "official": {"label": "공공 및 연구원", "color": "bg-indigo-500 border-indigo-500"}
-    }
-    
-    response_data = []
-    for key, domains in SITE_FILTERS.items():
-        response_data.append({
-            "id": key,
-            "label": meta_info[key]["label"],
-            "color": meta_info[key]["color"],
-            "domains": domains
-        })
-        
-    return response_data
