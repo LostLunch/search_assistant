@@ -60,7 +60,7 @@ function App() {
     setAiImprovedTerm(''); 
 
     try {
-      const response = await fetch('http://localhost:8000/search', {
+      const response = await fetch('https://search-assistant-qi8d.onrender.com/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
